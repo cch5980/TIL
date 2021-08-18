@@ -1,7 +1,7 @@
 # Redux Middleware
 
 - 미들웨어: OS와 소프트웨어 중간에서 조정과 중개 역할을 하는 중간 소프트웨어 역할([위키백과](https://ko.wikipedia.org/wiki/%EB%AF%B8%EB%93%A4%EC%9B%A8%EC%96%B4))
-- 리덕스 미들웨어는 액션을 디스패치했을 때 리듀서에서 이를 처리하기에 앞서 사전에 지정된 작업들을 실행
+- 리덕스 미들웨어는 액션을 디스패치했을 때 리듀서에서 이를 처리하기에 앞서 사전에 지정된 작업들을 실행한다.
 - 어떠한 두가지 요소의 중간에서 동작하는 소프트웨어라고 생각해보면 크게 보았을 때 그 의미가 대략 같다.
 - 리덕스가 가지는 핵심 기능 중 하나는 **미들웨어를 사용할 수 있다는 점**이다.
 - Context API나 MobX 경우에는 미들웨어를 지원하지 않는다.
@@ -18,6 +18,7 @@
   - 전달 받은 액션을 단순히 콘솔에 기록
   - 전달받은 액션 정보를 기반으로 액션을 아예 취소
   - 다른 종류의 액션을 추가로 디스패치
+  - ...등등
 
 ![reactjs-redux_middleware-01](md-images/reactjs-redux_middleware-01.png)
 
@@ -47,7 +48,7 @@
 
   - 미들웨어는 함수를 반환하는 함수를 반환하는 함수이다.
 
-  - `store` 는 리덕스 스토어 인스턴스
+  - `store` 는 리덕스 스토어 인스턴스: dispatch, getState()
 
   - `action` 은 디스패치된 액션
 
@@ -85,7 +86,7 @@ export default loggerMiddleware;
 
 ### 3-1) Thunk
 
-- Thunk는 특정 작업을 나중에 할 수 있도록 미루기 위해 함수 형태로 감싼 것을 의미한다.
+- Thunk는 특정 작업을 나중에 할 수 있도록 미루기 위해 **함수** 형태로 감싼 것을 의미한다.
 
   - ```react
     const addOne = x => x + 1;
@@ -99,6 +100,7 @@ export default loggerMiddleware;
   - ```react
     const addOne = x => x + 1;
     function addOneThunk (x) {
+      // api 요청
       const thunk = () => addOne(x);
       return thunk;
     }
