@@ -580,3 +580,229 @@ module.exports = api;
 
 ![reactjs-21-16](md-images/reactjs-21-16.png)
 
+
+
+### 5-5) 컨트롤러 파일 작성
+
+- 라우트를 작성하는 과정에서 특정 경로에 미들웨어를 등록할 때는 다음과 같이 두 번째 인자에 함수를 선언해서 바로 넣어 줄 수 있다.
+
+```react
+router.get('/', ctx => {
+  
+});
+```
+
+- 하지만 라우트 처리 함수의 코드가 길면 라우터 설정을 한눈에 보기 힘들다. 그렇기 때문에 이 라우트 처리 함수들을 다른 파일로 따로 분리해서 관리할 수 있다.
+- 이렇게 <u>라우트 처리 함수만 모아 놓은 파일</u>을 **컨트롤러**라고 한다.
+
+- API 기능을 간단하게 구현하면서 컨트롤러를 작성해보자.
+
+- ```bash
+  $ yarn add koa-bodyparser
+  ```
+
+  - koa-bodyparser 는 POST/PUT/PATCH 같은 메서드의 Request Body에 JSON 형식으로 데이터를 넣어주면, 이를 파싱하여 서버에서 사용할 수 있게 해준다.
+
+  - 이 때 주의할 점은 router를 적용하는 코드의 윗부분에서 해야 한다.
+
+  - ```javascript
+    // src/index.js
+    ...
+    const bodyParser = require('koa-bodyparser');
+    
+    const api = require('./api');
+    
+    const app = new Koa();
+    const router = new Router();
+    
+    // 라우터 설정
+    router.use('/api', api.routes()); // api 라우트 적용
+    
+    // 라우터 적용 전에 bodyParser 적용
+    app.use(bodyParser());
+    
+    // app 인스턴스에 라우터 적용
+    app.use(router.routes()).use(router.allowedMethods());
+    
+    app.listen(4000, () => {
+      console.log('Listening to prot 4000');
+    });
+    ```
+
+```javascript
+// src/api/post/posts.ctrl.js
+let postId = 1; // id의 초기값
+
+// posts 배열 초기 데이터
+const posts = [
+  {
+    id: 1,
+    title: '제목',
+    body: '내용',
+  },
+];
+
+/*  포스트 작성
+    POST /api/posts
+    { title, body }
+*/
+exports.write = (ctx) => {
+  // REST API의 Request Body는 ctx.request.body에서 조회할 수 있다.
+  const { title, body } = ctx.request.body;
+  postId += 1; // 기존 postId 값에 1을 더한다.
+  const post = { id: postId, title, body };
+  posts.push(post);
+  ctx.body = post;
+};
+
+/*  포스트 목록 조회
+    GET /api/posts
+*/
+exports.list = (ctx) => {
+  ctx.body = posts;
+};
+
+/*  특정 포스트 조회
+    GET /api/posts/:id
+ */
+exports.read = (ctx) => {
+  const { id } = ctx.params;
+  // 주어진 id 값으로 포스트를 찾는다.
+  // 파라미터로 받아 온 값은 문자열 형식이므로 파라미터를 숫자로 변환하거나 비교할 p.id값을 문자열로 변경해야 한다.
+  const post = posts.find((p) => p.id.toString() === id);
+  // 포스트가 없으면 오류를 반환한다.
+  if (!post) {
+    ctx.state = 404;
+    ctx.body = {
+      message: '포스트가 존재하지 않는다.',
+    };
+    return;
+  }
+  ctx.body = post;
+};
+
+/*  특정 포스트 제거
+    DELETE /api/post/:id
+*/
+exports.remove = (ctx) => {
+  const { id } = ctx.params;
+  // 해당 id를 가진 post가 몇번째인지 확인한다.
+  const index = posts.findIndex((p) => p.id.toString() === id);
+  // 포스트가 없으면 오류를 반환한다.
+  if (index === -1) {
+    ctx.status = 404;
+    ctx.body = {
+      message: '포스트가 존재하지 않는다.',
+    };
+    return;
+  }
+  // index번째 아이템을 제거한다.
+  posts.splice(index, 1);
+  ctx.status = 204; // No Content
+};
+
+/*  포스트 수정(교체)
+    PUT /api/posts/:id
+    { title, body }
+*/
+exports.replace = (ctx) => {
+  // PUT 메서드는 전체 포스트 정보를 입력하여 데이터를 통째로 교체할 때 사용한다.
+  const { id } = ctx.params;
+  // 해당 id를 가진 post가 몇번째인지 확인한다.
+  const index = posts.findIndex((p) => p.id.toString() === id);
+  // 포스트가 없으면 오류를 반환한다.
+  if (index === -1) {
+    ctx.status = 404;
+    ctx.body = {
+      message: '포스트가 존재하지 않는다.',
+    };
+    return;
+  }
+  // 전체 객체를 덮어 씌운다.
+  // 따라서 id를 제외한 기존 정보를 날리고, 객체를 새로 만든다.
+  posts[index] = {
+    id,
+    ...ctx.request.body,
+  };
+  ctx.body = posts[index];
+};
+
+/*  포스트 수정(특정 필드 변경)
+    PATCH /api/posts/:id
+    { title, body }
+*/
+exports.update = (ctx) => {
+  // PATCH 메서드는 주어진 필드만 교체한다.
+  const { id } = ctx.params;
+  // 해당 id를 가진 post가 몇번째인지 확인한다.
+  const index = posts.findIndex((p) => p.id.toString() === id);
+  // 포스트가 없으면 오류를 반환한다.
+  if (index === -1) {
+    ctx.status = 404;
+    ctx.body = {
+      message: '포스트가 존재하지 않는다.',
+    };
+    return;
+  }
+  // 기존 값에 정보를 덮어 씌운다.
+  posts[index] = {
+    ...posts[index],
+    ...ctx.request.body,
+  };
+  ctx.body = posts[index];
+};
+```
+
+- 컨트롤러를 만들면서 `exports.이름 = ...` 형식으로 함수를 내보냈다. 이렇게 내보낸 코드는 다음 형식으로 불러올 수 있다.
+
+  - ```javascript
+    const 모듈이름 = require('파일이름');
+    모듈이름.이름();
+    ```
+
+  - `Require('./posts.ctrl')` 을 입력하여 posts.ctrls.js 파일을 불러온다면 다음 객체를 불러오게 된다.
+
+  - ```javascript
+    {
+      write: Function,
+      list: Fucntion,
+      read: Fucntion,
+      remove: Fucntion,
+      replace: Fucntion,
+      update: Fucntion,
+    };
+    ```
+
+```javascript
+// src/api/posts/index.js
+const Router = require('koa-router');
+const postsCtrl = require('./posts.ctrl');
+
+const posts = new Router();
+
+posts.get('/', postsCtrl.list);
+posts.post('/', postsCtrl.write);
+posts.get('/:id', postsCtrl.read);
+posts.delete('/:id', postsCtrl.remove);
+posts.put('/:id', postsCtrl.replace);
+posts.patch('/:id', postsCtrl.update);
+
+module.exports = posts;
+```
+
+![reactjs-21-17](md-images/reactjs-21-17.png)
+
+
+
+- update와 replace 함수는 용도는 비슷하지만 구현 방식이 다르다.
+
+  - update(PATCH)는 기존 값은 유지하면서 새 값을 덮어 씌운다.
+  - replace(PUT)은 Request Body로 받은 값이 id를 제외한 모든 값을 대체한다.
+
+- ![reactjs-21-18](md-images/reactjs-21-18.png)
+
+  ![reactjs-21-19](md-images/reactjs-21-19.png)
+
+- PATCH로 했을 때는 기존 body 내용을 유지하며, title 값만 변경되었다.
+- PUT으로 했을 때는 기존 body가 사라졌다.
+
