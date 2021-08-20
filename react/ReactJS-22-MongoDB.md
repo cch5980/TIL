@@ -205,7 +205,7 @@ mongoose
 
 
 
-## 4. esm으로 ES 모듈 import/export 문법 사용
+## 🔥4. esm으로 ES 모듈 import/export 문법 사용
 
 - 리액트 프로젝트에서 사용해 오던 ES 모듈 import/export 문법은 Node.js에서 아직 정식 지원되지 않는다.
 - 깔끔한 코드를 위해 사용할 수 있도록 설정한다.
@@ -253,4 +253,565 @@ module.exports = require('./main.js');
 ```
 
 - 그리고 현재까지 작성한 코드 파일들을 import/export 구문으로 수정한다.
+
+
+
+## 🔥5. 데이터베이스의 스키마와 모델
+
+- mongoose에는 **스키마(schema)**와 **모델(model)**이라는 개념이 있다.
+- 스키마는 컬렉션에 들어가는 문서 내부의 각 필드가 어떤 형식으로 되어 있는지 정의하는 객체이다.
+- 모델은 스키마를 사용하여 만드는 인스턴스로, 데이터베이스에서 실제 작업을 처리할 수 있는 함수들을 지니고 있는 객체이다.
+
+![reactjs-22-04](md-images/reactjs-22-04.png)
+
+
+
+### 5-1) 스키마 생성
+
+- 모델을 만들려면 스키마를 만들어 줘야 한다.
+
+- 블로그 포스트에 대한 스키마를 정의해보자.
+
+  - 제목, 내용, 태그, 작성일
+
+- |   필드 이름   | 데이터 타입 |   설명    |
+  | :-----------: | :---------: | :-------: |
+  |     title     |   문자열    |   제목    |
+  |     body      |   문자열    |   내용    |
+  |     tags      | 문자열 배열 | 태그 목록 |
+  | publishedDate |    날짜     | 작성 날짜 |
+
+```javascript
+// src/models/post.js
+import mongoose from 'mongoose';
+
+const { Schema } = mongoose;
+
+const PostSchema = new Schema({
+  title: String,
+  body: String,
+  tags: [String], // 문자열로 이루어진 배열
+  publishedDate: {
+    type: Date,
+    default: Date.now, // 현재 날짜를 기본값으로 지정
+  },
+});
+```
+
+- Schema에서 기본적으로 지원하는 타입은 다음과 같다.
+
+|               타입               |                     설명                     |
+| :------------------------------: | :------------------------------------------: |
+|              String              |                    문자열                    |
+|              Number              |                     숫자                     |
+|               Date               |                     날짜                     |
+|              Buffer              |           파일을 담을 수 있는 버퍼           |
+|             Boolean              |              true 또는 false 값              |
+|    Mixed(Schema, Types.Mixed)    |       어떤 데이터도 넣을 수 있는 형식        |
+| ObjectId(Schema, Types.ObjectId) | 객체 아이디, 주로 다른 객체를 참조할 때 넣음 |
+|              Array               |     배열 형태의 값으로 [ ]로 감싸서 사용     |
+
+- 다음과 같이 좀 더 복잡한 방식의 스키마를 선언하여 데이터를 저장할 수 있다.
+  - 스키마 내부에 다른 스키마를 내장시킬 수 있다.
+
+```javascript
+const AuthorSchema = new Schema({
+  name: String,
+  email: String,
+});
+const BookSchema = new Schema({
+  title: String,
+  description: String,
+  authors: [AuthorSchema],
+  meta: {
+    likes: Number,
+  },
+  extra: Schema.Types.Mixed
+});
+```
+
+
+
+### 5-2) 모델 생성
+
+- model() 함수는 두 개의 파라미터가 필요하다.
+  - 첫번째 파라미터는 스키마 이름
+  - 두번째 파라미터는 스키마 객체
+- 데이터베이스는 스키마 이름을 정해 주면 그 이름의 복수 형태로 데이터베이스에 컬렉션 이름을 만든다.
+
+```javascript
+// src/models/post.js
+(...)
+
+const Post = mongoose.model('Post', PostSchema);
+export default Post;
+```
+
+
+
+## 🔥6. MongoDB Compass 의 설치 및 사용
+
+- [MongoDB Compass](https://www.mongodb.com/try/download/compass)
+
+![reactjs-22-05](md-images/reactjs-22-05.png)
+
+
+
+## 🔥7. 데이터 생성과 조회
+
+### 7-1) 데이터 생성
+
+```javascript
+// src/api/posts/posts.ctrl.js
+import Post from '../../models/post';
+
+/*
+  POST /api/posts
+  {
+    title: '제목',
+    body: '내용',
+    tags: ['태그1', '태그2']
+  }
+*/
+export const write = async (ctx) => {
+  const { title, body, tags } = ctx.request.body;
+  const post = new Post({
+    title,
+    body,
+    tags,
+  });
+  try {
+    await post.save();
+    ctx.body = post;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+- 포스트의 인스턴스를 만들 때는 `new` 키워드를 사용한다.
+- 인스턴스를 만들고 `save()` 함수를 실행시키면 데이터베이스에 저장된다. 이 함수의 반환값은 Promise 이므로 async/await 문법으로 데이터베이스 저장 요청을 완료할 때까지 기다릴 수 있다.
+
+![reactjs-22-06](md-images/reactjs-22-06.png)
+
+
+
+### 7-2) 데이터 조회
+
+- 데이터를 조회할 때는 모델 인스턴스의 `find()` 함수를 사용한다.
+
+```javascript
+// src/api/posts/posts.ctrl.js
+
+/*
+  GET /api/posts
+*/
+export const list = async (ctx) => {
+  try {
+    const posts = await Post.find().exec();
+    ctx.body = posts;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+
+
+### 7-3) 특정 포스트 조회
+
+- 특정 id를 가진 데이터를 조회할 때는 `findById()` 함수를 사용한다.
+
+```javascript
+/*
+  GET /api/posts/:id
+*/
+export const read = async (ctx) => {
+  const { id } = ctx.params;
+  try {
+    const post = await Post.findById(id).exec();
+    if (!post) {
+      ctx.status = 404; // Not Found
+      return;
+    }
+    ctx.body = post;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+
+
+## 🔥8. 데이터 삭제와 수정
+
+### 8-1) 데이터 삭제
+
+- `remove()`: 특정 조건을 만족하는 데이터를 모두 지운다.
+- `findByIdAndRemove()`: id를 찾아서 지운다.
+- `findOneAndRemove()`: 특정 조건을 만족하는 데이터 하나를 찾아서 제거한다.
+
+```javascript
+/*
+  DELETE /api/posts/:id
+*/
+export const remove = async (ctx) => {
+  const { id } = ctx.params;
+  try {
+    await Post.findByIdAndRemove(id).exec();
+    ctx.status = 204; // No Content (성공하기는 했지만 응답할 데이터는 없음)
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+
+
+### 8-2 데이터 수정
+
+- 데이터를 업데이트할 때는 findByIdAndUpdate() 함수를 사용한다.
+  - 첫번째 파라미터는 id
+  - 두번쨰 파라미터는 업데이트 내용
+  - 세번째 파라미터는 업데이트의 옵션
+
+```javascript
+/*
+  PATCH /api/posts/:id
+  {
+    title: '수정',
+    body: '수정 내용',
+    tags: ['수정', '태그']
+  }
+*/
+export const update = async (ctx) => {
+  const { id } = ctx.params;
+  try {
+    const post = await Post.findByIdAndUpdate(id, ctx.request.body, {
+      // 이 값을 설정하면 업데이트된 데이터를 반환
+      // false일 때는 업데이트되기 전의 데이터를 반환
+      new: true,
+    }).exec();
+    if (!post) {
+      ctx.status = 404;
+      return;
+    }
+    ctx.body = post;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+
+
+## 🔥9. 요청 검증
+
+### 9-1) ObjectId 검증
+
+- 앞에서 read API를 실행할 때, id가 올바른 ObjectId 형식이 아니면 500오류가 발생했다.
+- 500오류는 보통 서버에서 처리하지 않아 내부적으로 문제가 생겼을 때 발생한다.
+- 잘못된 id를 전달했다면 클라이언트가 요청을 잘못 보낸 것이니 400 Bad Request 오류를 띄어주는 것이 맞다.
+- 그러려면 id값이 올바른 ObjectId 인지 확인해야 한다.
+
+```javascript
+import mongoose from 'mongoose';
+
+const { ObjectId } = mongoose.Types;
+ObjectId.isValid(id);
+```
+
+```javascript
+// src/api/posts/posts.ctrl.js
+import Post from '../../models/post';
+import mongoose from 'mongoose';
+
+const { ObjectId } = mongoose.Types;
+
+export const checkObjectId = (ctx, next) => {
+  const { id } = ctx.params;
+  if (!ObjectId.isValid(id)) {
+    ctx.status = 400; // Bad Request
+    return;
+  }
+  return next();
+};
+(...)
+```
+
+```javascript
+// src/api/posts/index.js
+import Router from 'koa-router';
+import * as postsCtrl from './posts.ctrl';
+
+const posts = new Router();
+
+posts.get('/', postsCtrl.list);
+posts.post('/', postsCtrl.write);
+
+const post = new Router(); // /api/posts/:id
+posts.get('/', postsCtrl.read);
+posts.delete('/', postsCtrl.remove);
+posts.patch('/', postsCtrl.update);
+
+posts.use('/:id', postsCtrl.checkObjectId, post.route());
+
+export default posts;
+```
+
+
+
+### 9-2) Request Body 검증
+
+- 포스트를 작성할 때 서버는 title, body, tags 값을 모두 전달받아야 한다.
+- 클라이언트가 값을 빼먹었을때는 400 오류가 발생해야 한다.
+- 따로 처리하지 않는 경우 요청 내용을 비운 상태에서 write API를 실행해도 요청이 성공하여 비어 있는 포스트가 등록된다.
+- 각 값을 if문으로 비교하는 방법도 있지만, 이를 수월하게 해주는 [Joi](https://www.npmjs.com/package/joi) 라이브러리를 활용하여 검증해주자.
+
+```bash
+$ yarn add joi
+```
+
+```javascript
+...
+import Joi from 'joi';
+
+(...)
+
+/*
+  POST /api/posts
+  {
+    title: '제목',
+    body: '내용',
+    tags: ['태그1', '태그2']
+  }
+*/
+export const write = async (ctx) => {
+  const schema = Joi.object().keys({
+    // 객체가 다음 필드를 가지고 있음을 검증
+    title: Joi.string().required(), // required()가 있으면 필수 항목
+    body: Joi.string().required(),
+    tags: Joi.array().items(Joi.string()).required(), // 문자열로 이루어진 배열
+  });
+
+  // 검증하고 나서 검증 실패인 경우 에러처리
+  const result = schema.validate(ctx.request.body);
+  if (result.error) {
+    ctx.status = 400; // Bad Request
+    ctx.body = result.error;
+    return;
+  }
+
+  const { title, body, tags } = ctx.request.body;
+  const post = new Post({
+    title,
+    body,
+    tags,
+  });
+  try {
+    await post.save();
+    ctx.body = post;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+
+(...)
+```
+
+
+
+## 🔥10. 페이지네이션 구현
+
+- list API는 현재 작성된 모든 포스트를 불러오는데, 만약 포스트 개수가 몇 백개라면 로딩 속도가 느려진다.
+- list API에 페이지네이션 기능을 구현해보자
+
+### 10-1) 가짜 데이터 생성하기
+
+```javascript
+// src/createFakeData.js
+import Post from './models/post';
+
+export default function createFakeData() {
+  // 0, 1, ... , 39로 이루어진 배열을 생성한 후 포스트 데이터로 변환
+  const posts = [...Array(40).keys()].map((i) => ({
+    title: `포스트 #${i}`,
+    // https://www.lipsum.com/ 에서 복사한 200자 이상의 텍스트
+    body: 'It is a long established fact that a reader will be distracted by the readable content of a page when looking at its layout. The point of using Lorem Ipsum is that it has a more-or-less normal distribution of letters, as opposed to using Content here, content here, making it look like readable English. Many desktop publishing packages and web page editors now use Lorem Ipsum as their default model text, and a search for lorem ipsum will uncover many web sites still in their infancy. Various versions have evolved over the years, sometimes by accident, sometimes on purpose (injected humour and the like).',
+    tags: ['가짜', '데이터'],
+  }));
+
+  Post.insertMany(posts, (err, docs) => {
+    console.log(docs);
+  });
+}
+```
+
+- main.js에서 함수를 한번 호출할 수 있도록 한다.
+- 데이터가 등록되면 지우던지 주석처리를 해준다.
+
+```javascript
+// src/main.js
+(...)
+import createFakeData from './createFakeData';
+(...)
+ 
+mongoose
+  .connect(MONGO_URI, { useNewUrlParser: true, useFindAndModify: false })
+  .then(() => {
+    console.log('Connected to MongoDB');
+    // createFakeData();
+  })
+  .catch((e) => {
+    console.error(e);
+  });
+(...)
+```
+
+
+
+### 10-2) 포스트를 역순으로 불러오기
+
+- list API에서  exec() 하기 전에 sort() 구문을 넣는다.
+- sort 함수의 파라미터는 { key: 1 } 형식으로 넣는다.
+  - key는 정렬할 필드를 설정
+  - 오른쪽 값을 1로 설정하면 오름차순, -1로 설정하며 내림차순
+
+```javascript
+/*
+  GET /api/posts
+*/
+export const list = async (ctx) => {
+  try {
+    const posts = await Post.find().sort({ _id: -1 }).exec();
+    ctx.body = posts;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+
+
+### 10-3) 보이는 개수 제한
+
+- 개수를 제한할 때는 limit() 함수를 사용, 파라미터에는 제한할 숫자를 넣는다.
+
+```javascript
+/*
+  GET /api/posts
+*/
+export const list = async (ctx) => {
+  try {
+    const posts = await Post.find().sort({ _id: -1 }).limit(10).exec();
+    ctx.body = posts;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+
+
+### 10-4) 페이지 기능 구현
+
+- skip 함수 사용
+  - 파라미터로 10을 넣어주면, 처음 열개를 제외하고 그다음 데이터를 불러온다.
+  - 20을 넣어주면, 처음 20개를 제외하고 그다음 데이터를 불러온다.
+  - (page-1) * 10 을 넣어서 해결!
+
+```javascript
+/*
+  GET /api/posts
+*/
+export const list = async (ctx) => {
+  // query는 문자열이기 때문에 숫자로 변환해줘야한다.
+  // 값이 주어지지 않는다면 1을 기본으로 사용한다.
+  const page = parseInt(ctx.query.page || '1', 10);
+
+  if (page < 1) {
+    ctx.status = 400;
+    return;
+  }
+
+  try {
+    const posts = await Post.find()
+      .sort({ _id: -1 })
+      .limit(10)
+      .skip((page - 1) * 10)
+      .exec();
+    ctx.body = posts;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+- localhost:4000/api/posts?page=2 형식으로 페이지를 지정하여 조회 가능하다.
+
+
+
+### 10-5) 마지막 페이지 번호 알려주기
+
+- 커스텀 헤더를 설정하여 마지막 페이지 번호 정보를 클라이언트에게 넘겨줄 수 있다.
+
+```javascript
+/*
+  GET /api/posts
+*/
+export const list = async (ctx) => {
+  // query는 문자열이기 때문에 숫자로 변환해줘야한다.
+  // 값이 주어지지 않는다면 1을 기본으로 사용한다.
+  const page = parseInt(ctx.query.page || '1', 10);
+
+  if (page < 1) {
+    ctx.status = 400;
+    return;
+  }
+
+  try {
+    const posts = await Post.find()
+      .sort({ _id: -1 })
+      .limit(10)
+      .skip((page - 1) * 10)
+      .exec();
+    const postCount = await Post.countDocuments().exec();
+    ctx.set('Last-Page', Math.ceil(postCount / 10));
+    ctx.body = posts;
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+- Last-Page 라는 커스텀 HTTP 헤더를 설정하였다.
+
+![reactjs-22-07](md-images/reactjs-22-07.png)
+
+
+
+### 10-6) 내용 길이 제한
+
+- body의 길이가 200자 이상이면 뒤에 '...'을 붙이고 문자열을 자르는 기능을 구현해보자.
+- `find()`를 통해 조회한 데이터는 mongoose 문서 인스턴스 형태이므로 데이터를 바로 변형할 수 없다.
+- `toJSON()` 함수를 실행하여 JSON 형태로 변환한 뒤 수정을 한다.
+
+```javascript
+/*
+  GET /api/posts
+*/
+export const list = async (ctx) => {
+  (...)
+    ctx.body = posts
+      .map((post) => post.toJSON())
+      .map((post) => ({
+        ...post,
+        body:
+          post.body.length < 200 ? post.body : `${post.body.slice(0, 200)}...`,
+      }));
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
 
