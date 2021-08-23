@@ -278,3 +278,507 @@ export const login = async (ctx) => {
 
 
 
+## 🔥4. 토큰 발급 및 검증하기
+
+- 클라이언트에서 사용자 로그인 정보를 지니고 있을 수 있도록 서버에서 토큰을 발급해준다.
+
+- jwt토큰을 만들기 위해 jsonwebtoken 이라는 모듈을 설치한다.
+
+```bash
+$ yarn add jsonwebtoken
+```
+
+
+
+### 4-1) 비밀키 설정하기
+
+- .env 파일을 열어서 JWT 토큰을 만들 때 사용할 비밀키를 만든다.
+
+```bash
+$ openssl rand -hex 64
+b822396384fcb981691e551724cba147ea4814c70b5b04922b046973b4c61b6a83dc025acabca3108e2ee80f61aaf88253e57ce3fb5a75c4571bddc9ee25ead8
+```
+
+- 출력된 랜덤 문자열을 복사하여 .env 파일에 JWT_SCRET 값으로 설정한다.
+
+```tex
+# .env
+PORT=4000
+MONGO_URI=mongodb://localhost:27017/blog
+JWT_SECRET=b822396384fcb981691e551724cba147ea4814c70b5b04922b046973b4c61b6a83dc025acabca3108e2ee80f61aaf88253e57ce3fb5a75c4571bddc9ee25ead8
+```
+
+- 이 비밀키는 나중에 JWT 토큰의 서명을 만드는 과정에서 사용된다. 외부에 공개되면 안된다.
+
+
+
+### 4-2) 토큰 발급하기
+
+```javascript
+// src/models/user.js
+(...)
+
+UserSchema.methods.generateToken = function () {
+  const token = jwt.sign(
+    // 첫번째 파라미터에는 토큰 안에 집어 넣고 싶은 데이터를 넣는다.
+    {
+      _id: this.id,
+      username: this.username,
+    },
+    process.env.JWT_SECRET, // 두 번째 파라미터에는 JWT 암호를 넣는다.
+    {
+      expiresIn: '7d', // 7일 동안 유효함
+    },
+  );
+  return token;
+};
+```
+
+- 회원가입과 로그인에 성공했을 때 토큰을 사용자에게 전달해준다.
+- 사용자가 브라우저에서 토큰을 사용할 때 두가지 방법을 사용한다.
+  - 브라우저의 localStorage 혹은 sessionStorage에 담아서 사용
+  - 브라우저의 쿠키에 담아서 사용
+- 브라우저의 localStorage 혹은 sessionStorage에 토큰을 담으면 사용하기가 매우 편리하고 구현하기도 쉽다.
+  - 하지만 누군가가 페이지에 악성 스크립트를 삽입한다면 쉽게 토큰을 탈취할 수 있다.(XSS - Cross Site Scripting)
+- 쿠키에 담아도 같은 문제가 발생할 수 있지만, httpOnly 라는 속성을 활성화하면 자바스크립트를 통해 쿠키를 조회할 수 없으므로 악성 스크립트로부터 안전하다.
+  - 대신에 CSRF(Cross Site Request Forgery)라는 공격에 취야해질 수 있다.
+  - 이 공격은 토큰을 쿠키에 담으면 사용자가 서버로 요청을 할 때마다 무조건 토큰이 함께 전달되는 점을 이용해서 사용자가 모르게 원하지 않는 API 요청을 하게 만든다.
+- 단, CSRF는 CSRF 토큰 사용 및 Refere 검증 등의 방식으로 제대로 막을 수 있는 반면, XSS는 보안장치를 적용해 놓아도 개발자가 놓칠 수 있는 다양한 취약점을 통해 공격을 받을 수 있다.
+- 여기서는 사용자 토큰을 쿠키에 담아서 사용하겠다.
+
+```javascript
+// src/api/auth/auth.ctrl.js
+
+/*
+    POST /api/auth/register
+    {
+        username: 'velopert',
+        password: 'mypass123'
+    }
+*/
+
+export const register = async (ctx) => {
+  	(...)
+    ctx.body = user.serialize();
+
+    const token = user.generateToken();
+    ctx.cookies.set('access_token', token, {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7일
+      httpOnly: true,
+    });
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+
+/*
+  POST /api/auth/login
+  {
+    username: 'chichi',
+    password: 'mypass123'
+  }
+*/
+export const login = async (ctx) => {
+  	(...)
+    ctx.body = user.serialize();
+    const token = user.generateToken();
+    ctx.cookies.set('access_token', token, {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7일
+      httpOnly: true,
+    });
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+
+
+### 4-3) 토큰 검증하기
+
+- 토큰 검증하는 작업을 미들웨어를 통해 처리하도록 만든다.
+
+```javascript
+// src/lib/jwtMiddleware.js
+import jwt from 'jsonwebtoken';
+
+const jwtMiddleware = (ctx, next) => {
+  const token = ctx.cookies.get('access_token');
+  if (!token) return next(); // 토큰이 없음
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log(decoded);
+    return next();
+  } catch (e) {
+    // 토큰 검증 실패
+    return next();
+  }
+};
+
+export default jwtMiddleware;
+```
+
+- 미들웨어를 만든 뒤 main.js 에서 app에 미들웨어를 적용한다.
+
+```javascript
+// src/main.js
+(...)
+import api from './api';
+// import createFakeData from './createFakeData';
+import jwtMiddleware from './lib/jwtMiddleware';
+(...)
+
+// 라우터 설정
+router.use('/api', api.routes()); // api 라우트 적용
+
+// 라우터 적용 전에 bodyParser 적용
+app.use(bodyParser());
+app.use(jwtMiddleware);
+
+(...)
+});
+```
+
+- 미들웨어를 적용한 뒤 Postman 으로 localhost:4000/api/auth/check 경로에 GET 요청을 해보면 터미널에 토큰이 해석된 결과가 나타난다.
+
+![reactjs-23-05](md-images/reactjs-23-05.png)
+
+- 이렇게 해석된 결과를 미들웨어에서 사용할 수 있기 위해 ctx의 state 안에 넣어준다.
+
+```javascript
+// src/lib/jwtMiddleware.js
+(...)
+const jwtMiddleware = (ctx, next) => {
+  (...)
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    ctx.state.user = {
+      _id: decoded._id,
+      username: decoded.username,
+    };
+    console.log(decoded);
+    return next();
+  } catch (e) {
+    (...)
+  }
+};
+```
+
+```javascript
+// src/api/auth/auth.ctrl.js
+
+/*
+  GET /api/auth/check
+*/
+export const check = async (ctx) => {
+  // 로그인 상태 확인
+  const { user } = ctx.state;
+  if (!user) {
+    // 로그인 중 아님
+    ctx.status = 401; // Unauthorized
+    return;
+  }
+  ctx.body = user;
+};
+```
+
+
+
+### 4-4) 토큰 재발급하기
+
+- 토큰이 담고 있는 값중 iat 값과 exp 값이 있다.
+  - iat: 이 토큰이 언제 만들어졌는지 알려 주는 값
+  - exp: 언제 만료되는지 알려 주는 값
+- exp에 표현된 날짜가 3.5일 미만이라면 토큰을 새로운 토큰으로 재발급해주는 기능을 구현해보자.
+
+```javascript
+// src/lib/jwtMiddleware.js
+(...)
+
+const jwtMiddleware = async (ctx, next) => {
+  (...)
+  try {
+    (...)
+    // 토큰의 남은 유효 기간이 3.5일 미만이라면 재발급
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.exp - now < 60 * 60 * 24 * 3.5) {
+      const user = await User.findById(decoded._id);
+      const token = user.generateToken();
+      ctx.cookies.set('access_token', token, {
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7일
+        httpOnly: true,
+      });
+    }
+    console.log(decoded);
+    return next();
+  } catch (e) {
+    // 토큰 검증 실패
+    return next();
+  }
+};
+```
+
+
+
+### 4-5) 로그아웃 기능 구현하기
+
+- 쿠키를 지워주면 끝난다.
+
+```javascript
+// src/api/auth/auth.ctrl.js
+
+/*
+  POST /api/auth/logout
+*/
+export const logout = async (ctx) => {
+  // 로그아웃
+  ctx.cookies.set('access_token');
+  ctx.status = 204; // No Content
+};
+```
+
+
+
+## 🔥5. Posts API에 회원 인증 시스템 도입하기
+
+- 새 포스트는 로그인 해야만 작성할 수 있고, 삭제와 수정은 작성자만 할 수 있도록 구현해보자.
+
+
+
+### 5-1) 스키마 수정하기
+
+```javascript
+// src/models/post.js
+(...)
+
+const PostSchema = new Schema({
+  title: String,
+  body: String,
+  tags: [String], // 문자열로 이루어진 배열
+  publishedDate: {
+    type: Date,
+    default: Date.now, // 현재 날짜를 기본값으로 지정
+  },
+  user: {
+    _id: mongoose.Types.ObjectId,
+    username: String,
+  },
+});
+
+const Post = mongoose.model('Post', PostSchema);
+export default Post;
+```
+
+
+
+### 5-2) posts 컬렉션 비우기
+
+- Compass를 열어서 posts 컬렉션을 삭제
+
+
+
+### 5-3) 로그인했을 때만 API를 사용할 수 있게 하기
+
+- 로그인 상태가 아니면 401 HTTP Status를 반환하고, 그렇지 않으면 그다음 미들웨어를 실행
+
+```javascript
+// src/lib/checkLoggedIn.js
+const checkLoggedIn = (ctx, next) => {
+  if (!ctx.state.user) {
+    ctx.status = 401; // Unauthorized
+    return;
+  }
+  return next();
+};
+
+export default checkLoggedIn;
+```
+
+```javascript
+// src/api/posts/index.js
+(...)
+import checkLoggedIn from '../../lib/checkLoggedIn';
+
+(...)
+posts.post('/', checkLoggedIn, postsCtrl.write);
+
+(...)
+post.delete('/', checkLoggedIn, postsCtrl.remove);
+post.patch('/', checkLoggedIn, postsCtrl.update);
+(...)
+```
+
+
+
+### 5-4) 포스트 작성 시 사용자 정보 넣기
+
+- 포스트를 작성할 때 사용자 정보를 넣어서 데이터베이스에 저장
+
+```javascript
+// src/api/posts/posts/ctrl.js
+
+/*
+  POST /api/posts
+  {
+    title: '제목',
+    body: '내용',
+    tags: ['태그1', '태그2']
+  }
+*/
+export const write = async (ctx) => {
+  (...)
+  const post = new Post({
+    title,
+    body,
+    tags,
+    user: ctx.state.user,
+  });
+  (...)
+};
+```
+
+![reactjs-23-06](md-images/reactjs-23-06.png)
+
+
+
+### 5-5) 포스트 수정 및 삭제 시 권한 확인하기
+
+- 작성자만 포스트를 수정하거나 삭제할 수 있도록 구현
+- id로 포스트를 조회하는 작업을 미들웨어로 해준다.
+- 기존의 checkObjectId 를 getPostById 로 바꿔준다.
+
+```javascript
+// src/api/posts/posts.ctrl.js
+import Post from '../../models/post';
+import mongoose from 'mongoose';
+import Joi from 'joi';
+
+const { ObjectId } = mongoose.Types;
+
+// 기존 checkObjectId
+export const getPostById = async (ctx, next) => {
+  const { id } = ctx.params;
+  if (!ObjectId.isValid(id)) {
+    ctx.status = 400; // Bad Request
+    return;
+  }
+  try {
+    const post = await Post.findById(id);
+    // 포스트가 존재하지 않을때
+    if (!post) {
+      ctx.status = 404; // Not Found
+      return;
+    }
+    ctx.state.post = post;
+    return next();
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+```javascript
+// src/api/posts/index.js
+(...)
+posts.use('/:id', postsCtrl.getPostById, post.routes());
+
+export default posts;
+```
+
+- read함수 내부에서 id로 포스트를 찾는 코드를 간소화해준다.
+
+```javascript
+// src/api/posts/posts.ctrl.js
+/*
+  GET /api/posts/:id
+*/
+export const read = (ctx) => {
+  ctx.body = ctx.state.post;
+};
+```
+
+- checkOwnPost 라는 미들웨어 작성
+  - id로 찾은 포스트가 로그인 중인 사용자가 작성한 포스트인지 확인하는 작업
+
+```javascript
+// src/api/posts/posts.ctrl.js
+
+export const checkOwnPost = (ctx, next) => {
+  const { user, post } = ctx.state;
+  if (post.user._id.toString() !== user._id) {
+    ctx.status = 403;
+    return;
+  }
+  return next();
+};
+```
+
+```javascript
+// src/api/posts/index.js
+
+post.delete('/', checkLoggedIn, postsCtrl.checkOwnPost, postsCtrl.remove);
+post.patch('/', checkLoggedIn, postsCtrl.checkOwnPost, postsCtrl.update);
+```
+
+- 새로운 계정을 만든 다음, 다른 계정을 사용하여 다른 계정으로 작성된 포스트를 삭제해보면 403 Forbidden 이 리턴되는 걸 확인할 수 있다.
+
+![reactjs-23-07](md-images/reactjs-23-07.png)
+
+
+
+## 🔥6. username/tags 로 포스트 필터링하기
+
+- 특정 사용자가 작성한 포스트만 조회하거나 특정 태그만 있는 포스트만 조회하는 기능을 만들어보자.
+
+```javascript
+// src/api/posts/posts.ctrl.js
+/*
+  GET /api/posts?username=&tag=&page=
+*/
+export const list = async (ctx) => {
+  // query는 문자열이기 때문에 숫자로 변환해줘야한다.
+  // 값이 주어지지 않는다면 1을 기본으로 사용한다.
+  const page = parseInt(ctx.query.page || '1', 10);
+
+  if (page < 1) {
+    ctx.status = 400;
+    return;
+  }
+
+  const { tag, username } = ctx.query;
+  // tag, username 값이 유효하면 객체 안에 넣고, 그렇지 않으면 넣지 않음
+  const query = {
+    ...(username ? { 'user.username': username } : {}),
+    ...(tag ? { tags: tag } : {}),
+  };
+
+  try {
+    const posts = await Post.find(query)
+      .sort({ _id: -1 })
+      .limit(10)
+      .skip((page - 1) * 10)
+      .exec();
+    const postCount = await Post.countDocuments(query).exec();
+    ctx.set('Last-Page', Math.ceil(postCount / 10));
+    ctx.body = posts
+      .map((post) => post.toJSON())
+      .map((post) => ({
+        ...post,
+        body:
+          post.body.length < 200 ? post.body : `${post.body.slice(0, 200)}...`,
+      }));
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+```
+
+- username 혹은 tag 값이 유효할 때만 객체 안에 해당 값을 넣는다.
+- 다음과 같이 요청을 하면 해당 쿼리에 대응하는 값들이 출력된다.
+
+```bash
+GET http://localhost:4000/api/posts?username=chichi
+GET http://localhost:4000/api/posts?tag=태그
+```
+
+![reactjs-23-08](md-images/reactjs-23-08.png)
