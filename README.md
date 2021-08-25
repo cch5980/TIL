@@ -10,7 +10,8 @@
 
 ### 1. Web(Frontend)
 
-- [REACT](./react)
+- [JavaScript](./javascript)
+- [React](./react)
 
 
 
