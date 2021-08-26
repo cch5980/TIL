@@ -523,3 +523,344 @@ export default RegisterPage;
 
 ![reactjs-24-10](md-images/reactjs-24-10.png)
 
+
+
+#### 2-1-1) AuthTemplate 완성하기
+
+- AuthTemplate 컴포넌트는 children으로 받아 온 내용을 보여 주기만 하는 역할이다.
+- 배경은 회색이고, 중앙에 흰색 박스를 띄어 주고, 홈 경로 /로 돌아가는 링크도 보여준다.
+
+```react
+// src/components/auth/AuthTemplate.js
+import React from 'react';
+import styled from 'styled-components';
+import palette from '../../lib/styles/palette';
+import { Link } from 'react-router-dom';
+
+/*
+    회원가입/로그인 페이지의 레이아웃을 담당하는 컴포넌트이다.
+*/
+
+/* 화면 전체를 채움 */
+const AuthTemplateBlock = styled.div`
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: ${palette.gray[2]};
+  /* flex로 내부 내용 중앙 정렬 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+`;
+
+/* 흰색 박스 */
+const WhiteBox = styled.div`
+  .logo-area {
+    display: black;
+    padding-bottom: 2rem;
+    text-align: center;
+    font-weight: bold;
+    letter-spacing: 2px;
+  }
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.025);
+  padding: 2rem;
+  width: 360px;
+  background: white;
+  border-radius: 2px;
+`;
+
+const AuthTemplate = ({ children }) => {
+  return (
+    <AuthTemplateBlock>
+      <WhiteBox>
+        <div className="logo-area">
+          <Link to="/">REACTERS</Link>
+        </div>
+        {children}
+      </WhiteBox>
+    </AuthTemplateBlock>
+  );
+};
+
+export default AuthTemplate;
+```
+
+![reactjs-24-11](md-images/reactjs-24-11.png)
+
+
+
+#### 2-1-2) AuthForm 완성하기
+
+```react
+// src/components/auth/AuthForm.js
+import React from 'react';
+import styled from 'styled-components';
+import { Link } from 'react-router-dom';
+import palette from '../../lib/styles/palette';
+import Button from '../common/Button';
+
+/*
+    회원가입 또는 로그인 폼을 보여 준다.
+*/
+const AuthFormBlock = styled.div`
+  h3 {
+    margin: 0;
+    color: ${palette.gray[8]};
+    margin-bottom: 1rem;
+  }
+`;
+
+/*
+  스타일링된 input
+*/
+
+const StyledInput = styled.input`
+  font-size: 1rem;
+  border: none;
+  border-bottom: 1px solid ${palette.gray[5]};
+  padding-bottom: 0.5rem;
+  outline: none;
+  width: 100%;
+  &:focus {
+    color: $oc-teal-7;
+    border-bottom: 1px solid ${palette.gray[7]};
+  }
+  & + & {
+    margin-top: 1rem;
+  }
+`;
+
+/*
+  폼 하단에 로그인 혹은 회원가입 링크를 보여 줌
+*/
+const Footer = styled.div`
+  margin-top: 2rem;
+  text-align: right;
+  a {
+    color: ${palette.gray[6]};
+    text-decoration: underline;
+    &:hover {
+      color: ${palette.gray[9]};
+    }
+  }
+`;
+
+const AuthForm = () => {
+  return (
+    <AuthFormBlock>
+      <h3>로그인</h3>
+      <form>
+        <StyledInput
+          autoComplete="username"
+          name="username"
+          placeholder="아이디"
+        />
+        <StyledInput
+          autoComplete="new-password"
+          name="password"
+          placeholder="비밀번호"
+          type="password"
+        />
+        <Button>로그인</Button>
+      </form>
+      <Footer>
+        <Link to="/register">회원가입</Link>
+      </Footer>
+    </AuthFormBlock>
+  );
+};
+
+export default AuthForm;
+```
+
+![reactjs-24-12](md-images/reactjs-24-12.png)
+
+
+
+- 여기서 로그인 버튼에 밝은 파란색을 넣어주고 width를 100% 차지하는 것으로 수정해본다.
+
+```react
+// src/components/common/Button.js
+import React from 'react';
+import styled, { css } from 'styled-components';
+import palette from '../../lib/styles/palette';
+
+const StyledButton = styled.button`
+	(...)
+
+  ${(props) =>
+    props.cyan &&
+    css`
+      background: ${palette.cyan[5]};
+      &:hover {
+        background: ${palette.cyan[4]};
+      }
+    `}
+`;
+
+const Button = (props) => <StyledButton {...props} />;
+
+export default Button;
+```
+
+- 버튼 컴포넌트에 상단 여백을 넣어주고 적용해준다.
+
+```react
+// src/components/auth/AuthForm.js
+(...)
+ 
+const ButtonWithMarginTop = styled(Button)`
+  margin-top: 1rem;
+`;
+
+const AuthForm = () => {
+  return (
+    (...)
+        <ButtonWithMarginTop cyan fullWidth>
+          로그인
+        </ButtonWithMarginTop>
+     (...)
+  );
+};
+
+export default AuthForm;
+
+```
+
+![reactjs-24-13](md-images/reactjs-24-13.png)
+
+
+
+- AuthForm에서 type props에 따라 다른 내용을 보여주도록 수정한다.
+- type 값에 따라 사용되는 문구도 달라지고, type이 'register'일 때는 비밀번호 확인 인풋도 보여준다.
+
+```react
+// src/components/auth/AuthForm.js
+(...)
+ 
+const textMap = {
+  login: '로그인',
+  register: '회원가입',
+};
+
+const AuthForm = ({ type }) => {
+  const text = textMap[type];
+  return (
+    <AuthFormBlock>
+      <h3>{text}</h3>
+      <form>
+        (...)
+        {type === 'register' && (
+          <StyledInput
+            autoComplete="new-password"
+            name="passwordConfirm"
+            placeholder="비밀번호 확인"
+            type="password"
+          />
+        )}
+        <ButtonWithMarginTop cyan fullWidth style={{ marginTop: '1rem' }}>
+          {text}
+        </ButtonWithMarginTop>
+      </form>
+      <Footer>
+        {type === 'login' ? (
+          <Link to="/register">회원가입</Link>
+        ) : (
+          <Link to="/login">로그인</Link>
+        )}
+      </Footer>
+    </AuthFormBlock>
+  );
+};
+
+export default AuthForm;
+```
+
+```react
+// src/pages/LoginPage.js
+
+const LoginPage = () => {
+  return (
+    <AuthTemplate>
+      <AuthForm type="login" />
+    </AuthTemplate>
+  );
+};
+
+export default LoginPage;
+```
+
+```react
+// src/pages/RegisterPage.js
+
+const RegisterPage = () => {
+  return (
+    <AuthTemplate>
+      <AuthForm type="register" />
+    </AuthTemplate>
+  );
+};
+
+export default RegisterPage;
+```
+
+![reactjs-24-14](md-images/reactjs-24-14.png)
+
+![reactjs-24-15](md-images/reactjs-24-15.png)
+
+
+
+### 2-2) 리덕스로 폼 상태 관리하기
+
+- 리덕스로 회원가입과 로그인 폼의 상태를 관리한다.
+
+```react
+// src/modules/auth.js
+import { createAction, handleActions } from 'redux-actions';
+import produce from 'immer';
+
+const CHANGE_FIELD = 'auth/CHANGE_FIELD';
+const INITIALIZE_FORM = 'auth/INITIALIZE_FORM';
+
+export const changeField = createAction(
+  CHANGE_FIELD,
+  ({ form, key, value }) => ({
+    form, // register, login
+    key, // username, password, passwordConfirm
+    value, // 실제 바꾸려는 값
+  }),
+);
+export const initializeForm = createAction(INITIALIZE_FORM, (form) => form); // register
+
+const initialState = {
+  register: {
+    username: '',
+    password: '',
+    passwordConfirm: '',
+  },
+  login: {
+    username: '',
+    password: '',
+  },
+};
+
+const auth = handleActions(
+  {
+    [CHANGE_FIELD]: (state, { payload: { form, key, value } }) =>
+      produce(state, (draft) => {
+        draft[form][key] = value;
+      }),
+    [INITIALIZE_FORM]: (state, { payload: form }) => ({
+      ...state,
+      [form]: initialState[form],
+    }),
+  },
+  initialState,
+);
+
+export default auth;
+```
+
