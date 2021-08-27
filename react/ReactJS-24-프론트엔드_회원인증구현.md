@@ -816,6 +816,7 @@ export default RegisterPage;
 ### 2-2) 리덕스로 폼 상태 관리하기
 
 - 리덕스로 회원가입과 로그인 폼의 상태를 관리한다.
+- 앞에서 틀만 잡아놓았던 auth 모듈을 수정한다.
 
 ```react
 // src/modules/auth.js
@@ -863,4 +864,338 @@ const auth = handleActions(
 
 export default auth;
 ```
+
+- 이제 컨테이너 컴포넌트를 만들어본다.
+- 리덕스와 연동할 때 useDispatch와 useSelector 함수를 사용한다.
+- onChange함수와 onSubmit 함수를 구현하여 필요한 액션을 디스패치하도록 구현한다.
+- useEffect를 사용하여 맨 처음 렌더링 후 initalizeForm 액션 생성 함수를 호출한다. 이 작업이 없으면 로그인 페이지에서 값을 입력한 뒤 다른 페이지로 이동했다가 다시 돌아왔을 때 값이 유지된 상캐로 보이게 된다.
+
+```react
+// src/containers/auth/LoginForm.js
+import React, { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { changeField, initializeForm } from '../../modules/auth';
+import AuthForm from '../../components/auth/AuthForm';
+
+const LoginForm = () => {
+  const dispatch = useDispatch();
+  const { form } = useSelector(({ auth }) => ({ form: auth.login }));
+  // 인풋 변경 이벤트 핸들러
+  const onChange = (e) => {
+    const { value, name } = e.target;
+    dispatch(
+      changeField({
+        form: 'login',
+        key: name,
+        value,
+      }),
+    );
+  };
+
+  // 폼 등록 이벤트 핸들러
+  const onSubmit = (e) => {
+    e.preventDefault();
+  };
+
+  // 컴포넌트가 처음 렌더링될 때 form을 초기화함
+  useEffect(() => {
+    dispatch(initializeForm('login'));
+  }, [dispatch]);
+
+  return (
+    <AuthForm
+      type="login"
+      form={form}
+      onChange={onChange}
+      onSubmit={onSubmit}
+    />
+  );
+};
+
+export default LoginForm;
+```
+
+- LoginPage에서 기존 AuthForm을 LoginForm으로 대체시킨다.
+
+```react
+// src/pages/LoginPage.js
+import React from 'react';
+import AuthTemplate from '../components/auth/AuthTemplate';
+import LoginForm from '../containers/auth/LoginForm';
+
+const LoginPage = () => {
+  return (
+    <AuthTemplate>
+      <LoginForm />
+    </AuthTemplate>
+  );
+};
+
+export default LoginPage;
+```
+
+- 컨테이너에서 props로 넣어 주었던 값을 AuthForm 컴포넌트에서 적용시킨다.
+
+```react
+// src/components/auth/AuthForm.js
+(...)
+const AuthForm = ({ type, form, onChange, onSubmit }) => {
+  const text = textMap[type];
+  return (
+    <AuthFormBlock>
+      <h3>{text}</h3>
+      <form onSubmit={onSubmit}>
+        <StyledInput
+          (...)
+          onChange={onChange}
+          value={form.username}
+        />
+        <StyledInput
+          (...)
+          onChange={onChange}
+          value={form.password}
+        />
+        {type === 'register' && (
+          <StyledInput
+            (...)
+            onChange={onChange}
+            value={form.passwordConfirm}
+          />
+        )}
+      </form>
+      (...)
+    </AuthFormBlock>
+  );
+};
+
+export default AuthForm;
+```
+
+![reactjs-24-16](md-images/reactjs-24-16.png)
+
+- RegisterForm 컴포넌트도 LoginForm 컴포넌트를 복사한 뒤 사용되는 키워드만 바꿔준다.
+
+
+
+### 2-3) API 연동하기
+
+- axios를 사용하여 API 연동한다.
+- 여기서는 redux-saga를 이용한다.
+
+```bash
+$ yarn add axios redux-saga
+```
+
+- 유지보수성을 높이기 위해 기능별로 파일을 나누어서 작성한다.
+
+#### 2-3-1) axios 인스턴스 생성
+
+- Axios 인스턴스를 만들면 나중에 API 클라이언트에 공통된 설정을 쉽게 넣어 줄 수 있다.
+
+```react
+// src/lib/api/client.js
+import axios from 'axios';
+
+const client = axios.create();
+
+/*
+글로벌 설정 예시
+// API 주소를 다른 곳으로 사용함
+client.defaults.baseURL = 'https://external-api-server.com/';
+
+// 헤더 설정
+client.defaults.headers.common['Authorization'] = 'Bearer a1b2c3d4';
+
+// 인터셉터 설정
+axios.intercepter.response.use(
+  (response) => {
+    // 요청 성공시 특정 작업 수행
+    return response;
+  },
+  (error) => {
+    // 요청 실패 시 특정 작업 수행
+    return Promise.reject(error);
+  },
+);
+*/
+
+export default client;
+```
+
+
+
+#### 2-3-2) 프록시 설정
+
+- 현재 백엔드 서버는 4000 포트, 리액트 개발 서버는 3000 포트로 열려 있기 때문에 별도의 설정 없이 API를 호출하려고 하면 오류가 발생한다.
+- 이 오류를 CORS(Cross Origin Request) 오류라고 한다.
+- 프록시(proxy) 기능 사용
+  - 웹팩 개발 서버에서 지원하는 기능
+  - 개발 서버로 요청하는 API들을 우리가 프록시로 정해 둔 서버로 그대로 전달해 주고 그 응답을 애플리케이션에서 사용할 수 있게 해준다.
+- CRA로 만든 프로젝트에서 프록시를 설정할 때는 package.json 파일을 수정하면 된다.
+
+```javascript
+// src/package.json
+{
+  "name": "blog-frontend",
+  (...)
+  "proxy": "http://localhost:4000/"
+}
+```
+
+
+
+#### 2-3-3) API 함수 작성
+
+```javascript
+// src/lib/api/auth.js
+import client from './client';
+
+// 로그인
+export const login = ({ username, password }) =>
+  client.post('/api/auth/login', { username, password });
+
+// 회원가입
+export const register = ({ username, password }) =>
+  client.post('/api/auth/register', { username, password });
+
+// 로그인 상태 확인
+export const check = () => client.get('/api/auth/check');
+```
+
+
+
+#### 2-3-4) 더 쉬운 API 요청 상태 관리
+
+- redux-saga를 통해 더 쉽게 API를 요청할 수 있도록 loading 리덕스 모듈과 createRequestSaga 유틸 함수를 설정한다.
+
+```react
+// src/modules/loading.js
+import { createAction, handleActions } from 'redux-actions';
+
+const START_LOADING = 'loading/START_LOADING';
+const FINISH_LOADING = 'loading/FINISH_LOADING';
+
+/*
+    요청을 위한 액션 타입을 payload로 설정한다.(ex: "sample/GET_POST")
+*/
+export const startLoading = createAction(
+  START_LOADING,
+  (requestType) => requestType,
+);
+
+export const finishLoading = createAction(
+  FINISH_LOADING,
+  (requestType) => requestType,
+);
+
+const initialState = {};
+
+const loading = handleActions(
+  {
+    [START_LOADING]: (state, action) => ({
+      ...state,
+      [action.payload]: true,
+    }),
+    [FINISH_LOADING]: (state, action) => ({
+      ...state,
+      [action.payload]: false,
+    }),
+  },
+  initialState,
+);
+
+export default loading;
+```
+
+```react
+// src/modules/index.js
+(...)
+import loading from './loading';
+
+const rootReducer = combineReducers({
+  auth,
+  loading,
+});
+
+export default rootReducer;
+```
+
+```react
+// src/lib/createRequestSaga.js
+import { call, put } from 'redux-saga/effects';
+import { startLoading, finishLoading } from '../modules/loading';
+
+export default function createRequestSaga(type, request) {
+  const SUCCESS = `${type}_SUCCESS`;
+  const FAILURE = `${type}_FAILURE`;
+
+  return function* (action) {
+    yield put(startLoading(type)); // 로딩 시작
+    try {
+      const response = yield call(request, action.payload);
+      yield put({
+        type: SUCCESS,
+        payload: response.data,
+      });
+    } catch (e) {
+      yield put({
+        type: FAILURE,
+        payload: e,
+        error: true,
+      });
+    }
+    yield put(finishLoading(type)); // 로딩 끝
+  };
+}
+```
+
+
+
+#### 2-3-5) auth 리덕스 모듈에서 API 사용하기
+
+- 여섯 가지 액션 타입을 선언
+
+```react
+// src/modules/auth.js
+(...)
+const REGISTER = 'auth/REGISTER';
+const REGISTER_SUCCESS = 'auth/REGISTER_SUCCESS';
+const REGISTER_FAILURE = 'auth/REGISTER_FAILURE';
+
+const LOGIN = 'auth/LOGIN';
+const LOGIN_SUCCESS = 'auth/LOGIN_SUCCESS';
+const LOGIN_FAILURE = 'auth/LOGIN_FAILURE';
+```
+
+- 반복되는 부분이 많기 때문에 리팩토링 한다.
+
+```react
+// src/lib/createRequestSaga.js
+export const createRequestActionTypes = (type) => {
+  const SUCCESS = `${type}_SUCCESS`;
+  const FAILURE = `${type}_FAILURE`;
+  return [type, SUCCESS, FAILURE];
+};
+(...)
+```
+
+```react
+// src/modules/auth.js
+import { createRequestActionTypes } from '../lib/createRequestSaga';
+(...)
+/*
+const REGISTER = 'auth/REGISTER';
+const REGISTER_SUCCESS = 'auth/REGISTER_SUCCESS';
+const REGISTER_FAILURE = 'auth/REGISTER_FAILURE';
+
+const LOGIN = 'auth/LOGIN';
+const LOGIN_SUCCESS = 'auth/LOGIN_SUCCESS';
+const LOGIN_FAILURE = 'auth/LOGIN_FAILURE';
+*/
+
+const [REGISTER, REGISTER_SUCCESS, REGISTER_FAILURE] = createRequestActionTypes('auth/REGISTER');
+const [LOGIN, LOGIN_SUCCESS, LOGIN_FAILURE] = createRequestActionTypes('auth/LOGIN');
+```
+
+- API를 위한 사가를 생성하고, 액션 생성 함수와 리듀서도 구현한다.
 
