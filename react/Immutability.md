@@ -1,10 +1,9 @@
 # Immutability
 
 - **불변성**: 값이나 상태를 변경할 수 없는 값을 의미
-
-  - 상태를 변경하는데, 상태를 변경하지 않으면서 원하는 상태를 바꾼다는게 말이 어렵다...
-
-  - 필요한 값을 변형해서 사용하고 싶다면 어떤 값의 사본을 만들어서 사용해야 한다.
+- 상태를 변경하는데, 상태를 변경하지 않으면서 원하는 상태를 바꾼다는게 말이 어렵다...
+  
+- 필요한 값을 변형해서 사용하고 싶다면 어떤 값의 사본을 만들어서 사용해야 한다.
 
 
 
@@ -97,8 +96,8 @@ const todos = handleActions(
   1. 컴포넌트 내부에 배열 타입의 state 값을 리렌더링 해야 하는 상황이 있다고 가정한다.
   2. 이때, `state.push('a')`을 통해 state 배열에 직접 접근하여 요소를 추가한다.
   3. 우리는 push 전과 다른 값이라고 생각하지만, 리액트는 state라는 값은 **새로운 참조값이 아니기 때문에** 이전과 같은 값이라고 인식하고 리렌더링 하지 않는다.
-
 - 위와 같은 이유로 새로운 객체 or 배열을 만들어 새로운 참조값을 만들고, 리액트에게 이 값은 이전과 다른 참조값임을 알려야 한다.
+- 원시(primitive) 타입 : , 참조(reference)타입
 
 
 
@@ -107,16 +106,17 @@ const todos = handleActions(
 ![reactjs-immutability-01](md-images/reactjs-immutability-01.png)
 
 ```javascript
+const sh = 123;	// primitive(원시): 숫자, 불리언, 문자열, ...
+const myArra = [1,2,3]; // reference(참조): 객체, 배열, ...
+
 const user = { name: 'chichi', age: 30 } 
-const copyUser = user; // 배열의 복사가 아니라 같은 참조 값을 가짐
+const copyUser = user;
 user.age += 1; 
 console.log('user: ', user);
 console.log('copyUser: ', copyUser);
 
-/* 
-user: { name: 'chichi', age: 31 } 
-copyUser: { name: 'chichi', age: 31 } 
-*/ 
+name: chichi, age: 31
+name: chichi, age: 31
 ```
 
 ```javascript
@@ -126,10 +126,8 @@ arr.push('a');
 console.log('arr: ', arr);
 console.log('copyArr: ', copyArr);
 
-/* 
-arr: ["b", "c", "d", "a"]
-copyArr:["b", "c", "d", "a"]
-*/ 
+['b', 'c', 'd', 'a']
+
 ```
 
 
@@ -185,7 +183,7 @@ setState(state => {...state, key: value})
 ### - 객체에서 삭제
 
 ```react
-setState(state => {..._.omit(state, 'deleteKey')})
+setState(state => {delete(state, 'deleteKey')})
 ```
 
 ### - 객체에서 수정
