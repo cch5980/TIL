@@ -106,17 +106,16 @@ const todos = handleActions(
 ![reactjs-immutability-01](md-images/reactjs-immutability-01.png)
 
 ```javascript
-const sh = 123;	// primitive(원시): 숫자, 불리언, 문자열, ...
-const myArra = [1,2,3]; // reference(참조): 객체, 배열, ...
-
 const user = { name: 'chichi', age: 30 } 
-const copyUser = user;
+const copyUser = user; // 배열의 복사가 아니라 같은 참조 값을 가짐
 user.age += 1; 
 console.log('user: ', user);
 console.log('copyUser: ', copyUser);
 
-name: chichi, age: 31
-name: chichi, age: 31
+/* 
+user: { name: 'chichi', age: 31 } 
+copyUser: { name: 'chichi', age: 31 } 
+*/ 
 ```
 
 ```javascript
@@ -126,8 +125,10 @@ arr.push('a');
 console.log('arr: ', arr);
 console.log('copyArr: ', copyArr);
 
-['b', 'c', 'd', 'a']
-
+/* 
+arr: ["b", "c", "d", "a"]
+copyArr:["b", "c", "d", "a"]
+*/ 
 ```
 
 
